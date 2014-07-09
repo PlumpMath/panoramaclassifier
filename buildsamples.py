@@ -3,7 +3,7 @@ from PIL import Image
 
 from os.path import splitext
 
-BASE_DIRECTORY = "/Users/bill/Projects/youvisit/panoramadetect/v2/component/sample/"
+BASE_DIRECTORY = "/Users/bill/Projects/youvisit/panoramadetect/component/sample/"
 
 def buildCylindricalSamples(filename, ratios):
   print "processing " + filename
