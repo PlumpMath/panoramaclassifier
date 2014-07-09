@@ -109,12 +109,12 @@ Determine if a give image is a panorama
 
 ============================================================"""
 def examinePanorama(filename):
-  name, extension = os.path.splitext(filename)
+  name, extension = os.path.splitext(os.path.basename(filename))
 
   cache = {
-    "U": CACHE + name + ".U",
-    "R": CACHE + name + ".R",
-    "L": CACHE + name + ".L"
+    "U": CACHE + name + ".U.npy",
+    "R": CACHE + name + ".R.npy",
+    "L": CACHE + name + ".L.npy"
   }
 
   # Load from cache if cached
@@ -122,6 +122,9 @@ def examinePanorama(filename):
     U = numpy.load(cache["U"])
     R = numpy.load(cache["R"])
     L = numpy.load(cache["L"])
+
+    width = U.shape[0]
+    height = R.shape[0]
   else:
     """
     Load image from file as grayscale
@@ -170,7 +173,7 @@ def examinePanorama(filename):
     numpy.save(CACHE + name + ".R", R)
     numpy.save(CACHE + name + ".L", L)
 
-  kernel = discretize(12, highpass, [0.1, 0.1, 0])
+  kernel = discretize(12, highpass, [1, 5, 10])
   R = scipy.signal.convolve(R, kernel, "same")
 
   minR = numpy.empty(height, dtype="float32")
@@ -217,23 +220,21 @@ def printLoader(cur, tot):
   stdout.flush()
 
 def main():
-  f_s = open("sphere.txt", "w")
-  f_c = open("cylind.txt", "w")
+  graphs_file = open(OUTPUT, "w")
   i = 0
   sample_number = len(samples)
 
   for sample in samples:
     P = examinePanorama(SAMPLE + sample["file"])
 
-    f_s.write(`i` + " " + `P` + "\n")
+    graphs_file.write(`i` + " " + `P` + "\n")
 
     i += 1
 
     printLoader(i, sample_number)
 
   print "\n"
-  f_s.close()
-  f_c.close()
+  graphs_file.close()
 
 def test():
   diff = [None, None, None]
@@ -258,8 +259,10 @@ def test():
 if __name__ == "__main__":
   from samples  import samples
   from sys      import stdout
+  from time     import time
 
   SAMPLE = BASE_DIRECTORY + "sample/"
+  OUTPUT = BASE_DIRECTORY + "log/" + `int(time())` + ".txt"
 
   # test()
   main()

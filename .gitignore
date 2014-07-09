@@ -2,4 +2,5 @@
 *.txt
 component/sample/*.jpg
 component/cache/*.npy
+component/log/*.txt
 .scratch/*
