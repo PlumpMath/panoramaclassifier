@@ -6,7 +6,7 @@ import scipy.misc
 import scipy.signal
 import scipy.special
 
-BASE_DIRECTORY = "/Users/bill/Projects/youvisit/panoramadetect/component/"
+BASE_DIRECTORY = "/Users/bill/workbench/youvisit/__old__/panoramadetect/component/"
 CACHE = BASE_DIRECTORY + "cache/"
 
 """============================================================
@@ -74,11 +74,11 @@ trinomial(x) = __________ + beta
                 sigma^2
 
 ============================================================"""
-def highpass(x, mu, sigma, beta):
+def trinomial(x, mu, sigma, beta, high, low):
   x_minus_mu_cubed  = numpy.power(x - mu, 3)
   sigma_sqrd      = numpy.power(sigma, 2)
 
-  return max(min(x_minus_mu_cubed / sigma_sqrd + beta, 1), 0)
+  return max(min(x_minus_mu_cubed / sigma_sqrd + beta, high), low)
 
 
 
@@ -90,7 +90,7 @@ negated binomial(x) = -1 * __________ + beta
                              sigma^2
 
 ============================================================"""
-def lowpass(x, mu, sigma, beta):
+def binomial(x, mu, sigma, beta):
   x_minus_mu_sqrd = numpy.power(x - mu, 2)
   sigma_sqrd      = numpy.power(sigma, 2)
   A = x_minus_mu_sqrd / sigma_sqrd
@@ -118,13 +118,14 @@ def examinePanorama(filename):
   }
 
   # Load from cache if cached
-  if os.path.isfile(cache["U"]) and os.path.isfile(cache["R"]) and os.path.isfile(cache["L"]):
+  if os.path.isfile(cache["U"]) and os.path.isfile(cache["R"]) and os.path.isfile(cache["L"]) and False:
     U = numpy.load(cache["U"])
     R = numpy.load(cache["R"])
     L = numpy.load(cache["L"])
 
     width = U.shape[0]
     height = R.shape[0]
+    aspectRatio = width / height
   else:
     """
     Load image from file as grayscale
@@ -136,6 +137,7 @@ def examinePanorama(filename):
     # width & height shortcuts
     width  = Image.shape[0]
     height = Image.shape[1]
+    aspectRatio = width / height
 
     """
     Calculate edge diffs
@@ -173,22 +175,43 @@ def examinePanorama(filename):
     numpy.save(CACHE + name + ".R", R)
     numpy.save(CACHE + name + ".L", L)
 
-  kernel = discretize(12, highpass, [1, 5, 10])
+  kernel = discretize(12, trinomial, [1, 5, 10, 1, 0])
   R = scipy.signal.convolve(R, kernel, "same")
 
-  minR = numpy.empty(height, dtype="float32")
-  maxR = numpy.empty(height, dtype="float32")
+  minU = numpy.empty(width,   dtype="float32")
+  minR = numpy.empty(height,  dtype="float32")
+  minL = numpy.empty(width,   dtype="float32")
+
+  threshold = 0.01
+
+  for i, value in enumerate(U):
+    if i == 0 or value < U[i - 1] + threshold and value > U[i - 1] - threshold:
+      minU[i] = 0.0
+    else:
+      minU[i] = 100.0
+
 
   for i, value in enumerate(R):
-    minR[i] = lowpass(value, mu=-0.17, sigma=0.1, beta=6)
-    maxR[i] = highpass(value, mu=0.05, sigma=0.05, beta=0.1)
+    minR[i] = binomial(value, mu=-0.17, sigma=0.1, beta=6)
 
-  nR = (numpy.sum(minR) / float(height)) / numpy.power(10, 1)
+  for i, value in enumerate(L):
+    if i == 0 or value < L[i - 1] + threshold and value > L[i - 1] - threshold:
+      minL[i] = 0.0
+    else:
+      minL[i] = 100.0
+
+  nR = numpy.sum(minR) / float(height)
+  nUL = (numpy.sum(minU) / float(width) + numpy.sum(minL) / float(width)) / 2
 
   # Transform aspect ratio to reflect "panoramaness"
-  # Calculate "panoramaness"
+  mRr = trinomial(aspectRatio, 3.39, 6, 0, 5, 0)
+  mULr = gaussian(aspectRatio, 2, 0.01, 2)
 
-  return nR
+  # Calculate "panoramaness"
+  pC = mRr + nR
+  pS = (mULr - nUL + pC) / 2
+
+  return [pS, pC]
 
 
 
@@ -205,18 +228,23 @@ def examinePanorama(filename):
 ===============================================================
 ============================================================"""
 
-def printLoader(cur, tot):
+def printLoader(cur, tot, msg):
   percent = float(cur) / float(tot)
 
-  stdout.write("\r" + `int(percent * 100)` + "%\t[[")
-
+  stdout.write("\r\t" + `int(percent * 100)` + "%\t")
+  full = "processing >> \033[94m" + msg
+  stdout.write(full.ljust(50))
+  stdout.write("\033[0m")
+  stdout.write("\033[43m")
   for pos in range(25):
     if pos < 25 * percent:
-      stdout.write("*")
-    else:
       stdout.write(" ")
-
-  stdout.write("]]")
+    else:
+      stdout.write("\033[0m")
+      stdout.write(" ")
+  
+  stdout.write("\033[0m")
+  stdout.write("<< end")
   stdout.flush()
 
 def main():
@@ -231,30 +259,22 @@ def main():
 
     i += 1
 
-    printLoader(i, sample_number)
+    printLoader(i, sample_number, sample["file"])
 
-  print "\n"
+  stdout.write("\n\n\t~~~ finished! ~~~\n\n")
   graphs_file.close()
 
 def test():
-  diff = [None, None, None]
+  s, c = examinePanorama(SAMPLE + samples[178]["file"])
+  print s
+  print c
+  """
+  file_diff = open(BASE_DIRECTORY + "log/" + `int(time())` + ".txt", "w")
+  for j, pixel in enumerate(panorama):
+    file_diff.write(`j` + " " + `pixel` + "\n")
 
-  diff[0] = examinePanorama(SAMPLE + samples[0]["file"])
-  diff[1] = examinePanorama(SAMPLE + samples[1]["file"])
-
-  i = 2
-
-  while samples[i]["type"] != "none":
-    i += 1
-
-  diff[2] = examinePanorama(SAMPLE + samples[i]["file"])
-
-  for i in range(3):
-    file_diff = open("diff_" + `i` + ".txt", "w")
-    for j in range(len(diff[i])):
-      file_diff.write(`j` + " " + `diff[i][j] * 10000` + "\n")
-
-    file_diff.close()
+  file_diff.close()
+  """
 
 if __name__ == "__main__":
   from samples  import samples
@@ -264,5 +284,5 @@ if __name__ == "__main__":
   SAMPLE = BASE_DIRECTORY + "sample/"
   OUTPUT = BASE_DIRECTORY + "log/" + `int(time())` + ".txt"
 
-  # test()
-  main()
+  test()
+  # main()
